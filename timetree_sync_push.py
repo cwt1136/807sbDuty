@@ -31,20 +31,26 @@ ICS_PATH = "calendar.ics"
 
 
 def export_ics():
-    # 呼叫 TimeTree-Exporter CLI 產生 ICS（實際參數請以套件當前文件為準）
+    # timetree-exporter 安裝後會提供一個同名的指令列工具，
+    # 帳號密碼建議用環境變數傳入（工具會自動讀取 TIMETREE_EMAIL / TIMETREE_PASSWORD），
+    # 這裡額外用 -e / -c 明確指定信箱與行事曆代碼，避免互動式提示卡住自動化流程。
+    env = os.environ.copy()
+    env["TIMETREE_EMAIL"] = EMAIL
+    env["TIMETREE_PASSWORD"] = PASSWORD
+
     result = subprocess.run(
         [
-            sys.executable, "-m", "timetree_exporter",
+            "timetree-exporter",
             "-e", EMAIL,
-            "-p", PASSWORD,
             "-c", CALENDAR_CODE,
             "-o", ICS_PATH,
         ],
         capture_output=True,
         text=True,
+        env=env,
     )
     if result.returncode != 0:
-        raise RuntimeError(f"TimeTree 匯出失敗: {result.stderr}")
+        raise RuntimeError(f"TimeTree 匯出失敗:\nstdout: {result.stdout}\nstderr: {result.stderr}")
 
 
 def parse_events():
