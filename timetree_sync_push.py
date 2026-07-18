@@ -18,6 +18,8 @@ timetree_sync_push.py
 import os
 import subprocess
 import sys
+from datetime import date, datetime, timedelta, timezone
+
 import requests
 from icalendar import Calendar
 
@@ -28,6 +30,8 @@ GAS_WEBHOOK_URL = os.environ["GAS_WEBHOOK_URL"]
 SYNC_SECRET = os.environ["TIMETREE_SYNC_SECRET"]
 
 ICS_PATH = "calendar.ics"
+TAIPEI_TZ = timezone(timedelta(hours=8))
+SYNC_WINDOW_DAYS = 100  # 只同步「今天」起算 100 天內的行程（含今天），過去的行程不同步
 
 
 def export_ics():
@@ -57,13 +61,29 @@ def parse_events():
     with open(ICS_PATH, "rb") as f:
         cal = Calendar.from_ical(f.read())
 
+    today = datetime.now(TAIPEI_TZ).date()
+    cutoff = today + timedelta(days=SYNC_WINDOW_DAYS)
+
     events = []
+    skipped_past = 0
+    skipped_future = 0
+
     for component in cal.walk("VEVENT"):
-        uid = str(component.get("UID"))
         start = component.get("DTSTART").dt
         end = component.get("DTEND").dt
         all_day = not hasattr(start, "hour")
 
+        # 統一換算成台北時間的日期，才能跟 today / cutoff 比較
+        start_date = start if all_day else start.astimezone(TAIPEI_TZ).date()
+
+        if start_date < today:
+            skipped_past += 1
+            continue
+        if start_date > cutoff:
+            skipped_future += 1
+            continue
+
+        uid = str(component.get("UID"))
         events.append({
             "uid": uid,
             "title": str(component.get("SUMMARY", "")),
@@ -72,6 +92,9 @@ def parse_events():
             "location": str(component.get("LOCATION", "")),
             "allDay": all_day,
         })
+
+    print(f"篩選後保留 {len(events)} 筆（今天 {today} 起 {SYNC_WINDOW_DAYS} 天內），"
+          f"略過過去 {skipped_past} 筆、超出範圍 {skipped_future} 筆")
     return events
 
 
@@ -81,7 +104,7 @@ def push_to_gas(events):
         "secret": SYNC_SECRET,
         "events": events,
     }
-    resp = requests.post(GAS_WEBHOOK_URL, json=payload, timeout=30)
+    resp = requests.post(GAS_WEBHOOK_URL, json=payload, timeout=120)
     resp.raise_for_status()
     print(f"已送出 {len(events)} 筆行程到 GAS，回應狀態碼: {resp.status_code}")
 
