@@ -1,9 +1,6 @@
 name: TimeTree to LINE Sync
 
 on:
-  schedule:
-    # 每 15 分鐘執行一次（GitHub Actions 使用 UTC 時間，這裡是每小時的 0,15,30,45 分）
-    - cron: "*/15 * * * *"
   workflow_dispatch: {} # 允許在 GitHub 網頁上手動點擊執行，方便測試
 
 jobs:
